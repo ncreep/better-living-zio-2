@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Better Living Through ZIO 2</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel='stylesheet' type='text/css' href='style.css' />
+</head>
+<body>
+<textarea id="source">
+
+class: center, middle, transition, intro
+
+# Better Living Through ZIO 2
+
+.horizontalCentered.caption[Daniel Beskin]
+
+---
+
+.opinions1[Opinions are my own]
+
+--
+
+.opinions2[... and my employer's]
+
+--
+
+.services[
+Reach out for:
+- Personalized workshops
+- Software development
+- Talks
+]
+
+.linksIntro.linkStackIntro[[linksta.cc/@ncreep](https://linksta.cc/@ncreep)]
+
+---
+
+## ZIO 2
+
+- Released on June 2022
+--
+
+  - With only 6 RCs
+
+???
+- More than 20 RCs for ZIO 1
+
+--
+
+- Improvements across the board
+--
+
+  - Performance
+  - Developer experience
+  - Operations
+
+---
+layout: false
+
+class: center, middle, transition
+
+# Performance
+
+---
+layout: true
+
+## Performance
+
+---
+
+- Rewritten runtime system
+--
+
+- Happy path optimization
+
+--
+  - Synchronous code
+  - Integration with external processes
+  - Cost-free tracing
+
+???
+- Possible slow down on async workloads
+- Tracing can't be turned off
+--
+
+- Auto-blocking
+---
+
+.autoBlockingIssue[![](auto-blocking-issue.png)]
+--
+.autoBlockingDisabled[![](auto-blocking-disabled.png)]
+--
+
+- Measure all the things!
+
+---
+layout: false
+
+class: center, middle, transition
+
+# Developer Experience
+
+---
+## The Biggest Change
+
+
+- `debug`  
+```
+val data: UIO[Int] =
+      fetchData(x)
+        .debug("the data")
+        .map(doStuff)
+        .debug("after stuff")
+```
+--
+
+```
+// the data: 35
+// after stuff: 42
+```
+---
+
+layout: true
+
+## Break with the Past
+
+---
+
+- Massive renames
+
+--
+
+- Consistency
+- Moving and deleting things around
+
+--
+
+- Breaking away from Haskell conventions
+
+
+---
+class:renamesSmallCode
+
+.renamesBlockLeft[
+```
+      "access"                 -> "environment",
+      "accessManaged"          -> "environmentWithManaged",
+      "accessM"                -> "environmentWithZIO",
+      "accessZIO"              -> "environmentWithZIO",
+      "asEC"                   -> "asExecutionContext",
+      "bimap"                  -> "mapBoth",
+      "bracket"                -> "acquireReleaseWith",
+      "bracketExit"            -> "acquireReleaseExitWith",
+      "bracketExit_"           -> "acquireReleaseExit",
+      "bracketOnError"         -> "acquireReleaseOnErrorWith",
+      "bracketOnError_"        -> "acquireReleaseOnError",
+      "bracket_"               -> "acquireRelease",
+      "bracket_"               -> "acquireRelease",
+      "checkM"                 -> "check",
+      "checkNM"                -> "checkN",
+      "checkAllM"              -> "checkAll",
+      "collectAllPar_"         -> "collectAllParDiscard",
+      "collectAll_"            -> "collectAllDiscard",
+      "collectM"               -> "collectZIO",
+      "contramapM"             -> "contramapZIO",
+      "effect"                 -> "attempt",
+      "effectAsync"            -> "async",
+      "effectAsyncInterrupt"   -> "asyncInterrupt",
+      "effectAsyncM"           -> "asyncZIO",
+      "effectAsyncMaybe"       -> "asyncMaybe",
+      "effectSuspend"          -> "suspend",
+      "effectSuspendTotal"     -> "suspendSucceed",
+      "effectSuspendWith"      -> "suspendWith",
+      "effectTotal"            -> "succeed",
+      "filterInputM"           -> "filterInputZIO",
+      "filterM"                -> "filterZIO",
+      "filterOrElse"           -> "filterOrElseWith",
+      "filterOrElse_"          -> "filterOrElse",
+      "flattenM"               -> "flattenZIO",
+      "foldCauseM"             -> "foldCauseZIO",
+      "foldLeftM"              -> "foldLeftZIO",
+      "foldM"                  -> "foldZIO",
+      "foldTraceM"             -> "foldTraceZIO",
+      "foldWeightedDecomposeM" -> "foldWeightedDecomposeZIO",
+      "foldWeightedM"          -> "foldWeightedZIO",
+      "foreachPar_"            -> "foreachParDiscard",
+      "untilOutputM"           -> "untilOutputZIO",
+      "whileInputM"            -> "whileInputZIO",
+      "whileOutputM"           -> "whileOutputZIO",
+      "collectWhileM"          -> "collectWhileZIO",
+      "collectUntilM"          -> "collectUntilZIO",
+```
+]
+--
+.renamesBlockRight[
+```
+      "foreach_"               -> "foreachDiscard",
+      "fromEffect"             -> "fromZIO",
+      "fromEffect"             -> "fromZIO",
+      "fromEffectOption"       -> "fromZIOOption",
+      "fromIterableM"          -> "fromIterableZIO",
+      "fromIteratorTotal"      -> "fromIteratorSucceed",
+      "halt"                   -> "failCause",
+      "haltWith"               -> "failCauseWith",
+      "ifM"                    -> "ifZIO",
+      "interrupted"            -> "isInterrupted",
+      "lockExecutionContext"   -> "onExecutionContext",
+      "loop_"                  -> "loopDiscard",
+      "makeReserve"            -> "fromReservationZIO",
+      "mapConcatM"             -> "mapConcatZIO",
+      "mapEffect"              -> "mapAttempt",
+      "mapM"                   -> "mapZIO",
+      "mapMPar"                -> "mapZIOPar",
+      "mapMParUnordered"       -> "mapZIOParUnordered",
+      "on"                     -> "onExecutionContext",
+      "optional"               -> "unsome",
+      "unoption"               -> "unsome",
+      "paginateChunkM"         -> "paginateChunkZIO",
+      "paginateM"              -> "paginateZIO",
+      "partitionPar_"          -> "partitionParDiscard",
+      "partition_"             -> "partitionDiscard",
+      "provide"                -> "provideService",
+      "rejectM"                -> "rejectZIO",
+      "repeatEffect"           -> "repeatZIO",
+      "repeatEffectChunk"      -> "repeatZIOChunk",
+      "repeatEffectOption"     -> "repeatZIOOption",
+      "repeatEffectWith"       -> "repeatZIOWithSchedule",
+      "repeatUntilM"           -> "repeatUntilZIO",
+      "repeatWhileM"           -> "repeatWhileZIO",
+      "repeatZIOWith"          -> "repeatZIOWithSchedule",
+      "replicateM"             -> "replicateZIO",
+      "replicateM_"            -> "replicateZIODiscard",
+      "reserve"                -> "fromReservation",
+      "retryUntilM"            -> "retryUntilZIO",
+      "retryWhileM"            -> "retryWhileZIO",
+      "someOrElseM"            -> "someOrElseZIO",
+      "tapM"                   -> "tapZIO",
+      "findM"                  -> "findZIO",
+      "foldM"                  -> "foldZIO",
+      "mapM"                   -> "mapZIO",
+      "modifyDelayM"           -> "modifyDelayZIO",
+      "reconsiderM"            -> "reconsiderZIO",
+```
+]
+
+---
+class:renamesSmallCode
+
+.renamesBlockLeft[
+```
+      "tapCause"               -> "tapErrorCause",
+      "testM"                  -> "test",
+      "toManaged"              -> "toManagedWith",
+      "toManaged_"             -> "toManaged",
+      "unfoldM"                -> "unfoldZIO",
+      "unlessM"                -> "unlessZIO",
+      "unsafeRunAsync"         -> "unsafeRunAsyncWith",
+      "unsafeRunAsync_"        -> "unsafeRunAsync",
+      "use_"                   -> "useDiscard",
+      "validatePar_"           -> "validateParDiscard",
+      "validate_"              -> "validateDiscard",
+      "whenCaseM"              -> "whenCaseZIO",
+      "whenM"                  -> "whenZIO",
+      "serviceWith"            -> "serviceWithZIO"
+      "collectAll_"            -> "collectAllDiscard",
+      "foldM"                  -> "foldSTM",
+      "foreach_"               -> "foreachDiscard",
+      "fromFunction"           -> "environmentWith",
+      "fromFunctionM"          -> "environmentWithSTM",
+      "ifM"                    -> "ifSTM",
+      "loop_"                  -> "loopDiscard",
+      "partial"                -> "attempt",
+      "replicateM"             -> "replicateSTM",
+      "replicateM_"            -> "replicateSTMDiscard",
+      "require"                -> "someOrFail",
+      "unlessM"                -> "unlessSTM",
+      "whenCaseM"              -> "whenCaseSTM",
+      "whenM"                  -> "whenSTM"
+      "access"                 -> "environmentWith",
+      "accessM"                -> "environmentWithZIO",
+      "accessZIO"              -> "environmentWithZIO",
+      "dropWhileM"             -> "dropWhileZIO",
+      "findM"                  -> "findZIO",
+      "fold"                   -> "runFold",
+      "foldM"                  -> "runFoldZIO",
+      "foldManaged"            -> "runFoldManaged",
+      "foldManagedM"           -> "runFoldManagedZIO",
+      "foldManagedZIO"         -> "runFoldManagedZIO",
+      "foldWhile"              -> "runFoldWhile",
+      "foldWhileM"             -> "runFoldWhileZIO",
+      "foldWhileManagedM"      -> "runFoldWhileManagedZIO",
+      "whenCaseM"              -> "whenCaseZIO"
+      "addDelayM"              -> "addDelayZIO",
+      "checkM"                 -> "checkZIO",
+      "contramapM"             -> "contramapZIO",
+      "delayedM"               -> "delayedZIO",
+      "dimapM"                 -> "dimapZIO",
+```
+]
+
+.renamesBlockRight[
+```
+      "foldWhileManagedZIO"    -> "runFoldWhileManagedZIO",
+      "foldWhileZIO"           -> "runFoldWhileZIO",
+      "foldWhileManaged"       -> "runFoldWhileManaged",
+      "foldZIO"                -> "runFoldZIO",
+      "foreachChunk"           -> "runForeachChunk",
+      "foreachChunkManaged"    -> "runForeachChunkManaged",
+      "foreachManaged"         -> "runForeachManaged",
+      "foreachWhile"           -> "runForeachWhile",
+      "foreachWhileManaged"    -> "runForeachWhileManaged",
+      "mapM"                   -> "mapZIO",
+      "collectWhileM"          -> "collectWhileZIO",
+      "collectUntilM"          -> "collectUntilZIO",
+      "accessStream"           -> "environmentWithStream",
+      "runInto"                -> "runIntoQueue",
+      "runIntoElementsManaged" -> "runIntoQueueElementsManaged",
+      "runFoldM"               -> "runFoldZIO",
+      "runFoldManagedM"        -> "runFoldManagedZIO",
+      "runFoldWhileM"          -> "runFoldWhileZIO",
+      "runFoldWhileManagedM"   -> "runFoldWhileManagedZIO",
+      "chunkN"                 -> "rechunk",
+      "intoHub"                -> "runIntoHub",
+      "intoHubManaged"         -> "runIntoHubManaged",
+      "intoManaged"            -> "runIntoQueueManaged",
+      "runIntoManaged"         -> "runIntoQueueManaged",
+      "intoQueue"              -> "runIntoQueue",
+      "intoQueueManaged"       -> "runIntoQueueManaged",
+      "lock"                   -> "onExecutor",
+      "mapAccumM"              -> "mapAccumZIO",
+      "mapChunksM"             -> "mapChunksZIO",
+      "mapConcatChunkM"        -> "mapConcatChunkZIO",
+      "mapMPartitioned"        -> "mapZIOPartitioned",
+      "scanM"                  -> "scanZIO",
+      "scanReduceM"            -> "scanReduceZIO",
+      "takeUntilM"             -> "takeUntilZIO",
+      "throttleEnforceM"       -> "throttleEnforceZIO",
+      "throttleShapeM"         -> "throttleShapeZIO",
+      "timeoutError"           -> "timeoutFail",
+      "timeoutErrorCause"      -> "timeoutFailCause",
+      "timeoutHalt"            -> "timeoutFailCause",
+      "fromInputStreamEffect"  -> "fromInputStreamZIO",
+      "fromIteratorEffect"     -> "fromIteratorZIO",
+      "fromJavaIteratorEffect" -> "fromJavaIteratorZIO",
+      "fromJavaIteratorTotal"  -> "fromJavaIteratorSucceed",
+      "halt"                   -> "failCause",
+      "repeatEffectChunkOption"-> "repeatZIOChunkOption",
+      "repeatWith"             -> "repeatWithSchedule",
+      "unfoldChunkM"           -> "unfoldChunkZIO",
+```
+]
+---
+
+- Highlights
+
+--
+
+  - `ZIO.effect -> ZIO.attempt`
+
+--
+  - `mapM -> mapZIO`
+
+--
+  - `foreach_ -> foreachDiscard`
+
+--
+  - `bracket -> acquireRelease`
+
+--
+  - No more `UIO`, `Task`, etc. companions
+
+--
+- Scalafix to automate
+---
+
+layout: true
+
+## Environmental Changes
+
+---
+
+- Phantom environment
+
+--
+
+- No more `Has`!
+
+--
+
+  - `ZIO[Has[A] with Has[B] with Has[C], ...]`
+  - `ZIO[A with B with C, ...]`
+
+--
+
+- No more `ZManaged`
+--
+
+  - `ZManaged[Any, Nothing, Foo]`
+  - `ZIO[Scope, Nothing, Foo]`
+  - `toManaged` anyone?
+
+---
+
+- Standard services are builtin
+  - `Clock`, `Console`, `Random`, `System`
+  - Still testable
+
+--
+- Removed `Blocking` service
+
+---
+layout: true
+
+## Layers All the Way Down
+
+---
+
+- ZIO Magic builtin
+
+--
+  - User-friendly compilation errors
+
+--
+- Layer auto-derivation
+
+--
+- Debugging
+
+
+--
+- "Eliminators for environmental effects"
+
+---
+layout: true
+
+## Testing
+
+---
+
+- Overloaded `test` for pure and effectful tests
+
+--
+
+- Sharing layers with `bootstrap`
+
+--
+
+- Test services part of runtime
+
+--
+
+  - `Clock`, `Console`, `Random`, `System`
+  - `Sized`
+
+---
+
+layout: false
+
+class: center, middle, transition
+
+# Operations
+
+---
+
+layout: true
+
+## Operations
+
+---
+
+layout: true
+
+## Config
+---
+
+- Config buitlin
+
+--
+
+- Declarative
+
+--
+
+- Testable
+
+--
+
+- Works with layer auto-derivation
+
+--
+
+- Pluggable backends
+---
+layout: true
+
+## Observability
+---
+
+- Logging facade
+
+--
+
+- Tracing always on
+--
+
+  - Resemble plain Java traces
+
+--
+
+- Monitoring builtin
+--
+
+  - JVM metrics
+
+--
+
+- Pluggable backends
+
+
+
+
+---
+layout: true
+
+## Wait, There's More
+
+---
+
+
+
+---
+---
+---
+---
+---
+---
+layout: false
+class: transition
+
+.endQuote[
+> TODO
+]
+
+.endQuote.footnote[TODO]
+.centered.linksFin.linkStackFin[[linksta.cc/@ncreep](https://linksta.cc/@ncreep)]
+
+
+
+</textarea>
+<script	src="remark-0.14.0.min.js"></script>
+
+<!-- For Scala 3 highlighting support -->
+<link rel="stylesheet" href="highlight.11.7.0.magula.min.css">
+<script src="highlight.11.7.0.min.js"></script>
+<script src="highlight.11.7.0.scala.min.js"></script>
+
+<script>
+// overriding the built-in highlighter with the newer version
+remark.highlighter.engine = hljs;
+</script>
+
+<script type="text/javascript">
+  var slideshow = remark.create({
+	countIncrementalSlides: false,
+  highlightLines: true,
+	highlightLanguage: 'scala',
+	highlightStyle: 'magula' // default, googlecode, magula, vs
+});
+</script>
+</body>
+</html>
