@@ -308,6 +308,7 @@ blockquote cite:before {
 }
 
 .githubLink {
+  margin-top: 80px;
   width: 900px;
   font-size: 0.7em;
   text-align: center;
