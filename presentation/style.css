@@ -1,5 +1,5 @@
 .remark-slide-number {
-  /* display: none; */
+  display: none;
   font-family: sans-serif;
 }
 
@@ -308,7 +308,6 @@ blockquote cite:before {
 }
 
 .githubLink {
-  margin-top: 250px;
   width: 900px;
   font-size: 0.7em;
   text-align: center;
@@ -402,4 +401,43 @@ blockquote cite:before {
 
 .autoBlockingDisabled img {
   width: 800px;
+}
+
+.envLaws img {
+  width: 800px;
+}
+
+.layerError .remark-code {
+  font-size: 19.5px;
+}
+
+.layers img {
+  margin-top: 50px;
+
+  width: 800px;
+}
+
+.durableRun .remark-code {
+  font-size: 19.5px;
+}
+
+.testOutput .remark-code {
+  font-size: 22px;
+}
+
+.stacktracesOld .remark-code {
+  font-size: 10.5px;
+}
+
+.stacktracesNew .remark-code {
+  font-size: 18px;
+}
+
+.zChannel {
+  font-size: 0.6em;
+}
+
+.nuit img {
+  width: 700px;
+  margin-top: 50px;
 }

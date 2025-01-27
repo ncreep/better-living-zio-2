@@ -55,6 +55,13 @@ Reach out for:
   - Operations
 
 ---
+## Nuit
+
+--
+
+.nuit.center[![](nuit.gif)]
+
+---
 layout: false
 
 class: center, middle, transition
@@ -103,18 +110,20 @@ class: center, middle, transition
 ---
 ## The Biggest Change
 
+--
 
-- `debug`  
 ```
 val data: UIO[Int] =
-      fetchData(x)
-        .debug("the data")
-        .map(doStuff)
-        .debug("after stuff")
+  ZIO.debug("starting") *>
+    fetchData(x)
+      .debug("the data")
+      .map(doStuff)
+      .debug("after stuff")
 ```
 --
 
 ```
+// starting
 // the data: 35
 // after stuff: 42
 ```
@@ -351,31 +360,179 @@ class:renamesSmallCode
 ]
 ---
 
-- Highlights
+```
+bracket(openWarehouse)(closeWarehouse):
+  warehouse =>
 
---
+    for
+      worker <- IO.effect(wakeupWorker())
+                  .retryUntilM(workerIsAlert)
+      _ <- IO.foreachParN_(16)(items)(submit(worker))
 
-  - `ZIO.effect -> ZIO.attempt`
+    yield ()
+```
+---
 
---
-  - `mapM -> mapZIO`
+```
+acquireReleaseWith(openWarehouse)(closeWarehouse):
+  warehouse =>
 
---
-  - `foreach_ -> foreachDiscard`
+    for
+      worker <- IO.effect(wakeupWorker())
+                  .retryUntilM(workerIsAlert)
+      _ <- IO.foreachParN_(16)(items)(submit(worker))
 
---
-  - `bracket -> acquireRelease`
+    yield ()
+```
+---
 
---
-  - No more `UIO`, `Task`, etc. companions
+```
+acquireReleaseWith(openWarehouse)(closeWarehouse):
+  warehouse =>
+
+    for
+      worker <- ZIO.effect(wakeupWorker())
+                   .retryUntilM(workerIsAlert)
+      _ <- ZIO.foreachParN_(16)(items)(submit(worker))
+
+    yield ()
+```
+---
+
+```
+acquireReleaseWith(openWarehouse)(closeWarehouse):
+  warehouse =>
+
+    for
+      worker <- ZIO.attempt(wakeupWorker())
+                   .retryUntilM(workerIsAlert)
+      _ <- ZIO.foreachParN_(16)(items)(submit(worker))
+
+    yield ()
+```
+---
+
+```
+acquireReleaseWith(openWarehouse)(closeWarehouse):
+  warehouse =>
+
+    for
+      worker <- ZIO.attempt(wakeupWorker())
+                   .retryUntilZIO(workerIsAlert)
+      _ <- ZIO.foreachParN_(16)(items)(submit(worker))
+
+    yield ()
+```
+---
+
+```
+acquireReleaseWith(openWarehouse)(closeWarehouse):
+  warehouse =>
+
+    for
+      worker <- ZIO.attempt(wakeupWorker())
+                   .retryUntilZIO(workerIsAlert)
+      _ <- ZIO.foreachPar_(items)(submit(worker))
+
+    yield ()
+```
+---
+
+
+```
+acquireReleaseWith(openWarehouse)(closeWarehouse):
+  warehouse =>
+
+    for
+      worker <- ZIO.attempt(wakeupWorker())
+                   .retryUntilZIO(workerIsAlert)
+      _ <- ZIO.foreachPar_(items)(submit(worker))
+              .withParallelism(16)
+
+    yield ()
+```
+???
+
+- There's a pitfall here if we don't specify a number for parallelism we'll get the enclosing default, which is likely to be unbounded.
+---
+
+
+```
+acquireReleaseWith(openWarehouse)(closeWarehouse):
+  warehouse =>
+
+    for
+      worker <- ZIO.attempt(wakeupWorker())
+                   .retryUntilZIO(workerIsAlert)
+      _ <- ZIO.foreachParDiscard(items)(submit(worker))
+              .withParallelism(16)
+              
+    yield ()
+```
 
 --
 - Scalafix to automate
+
+--
+
+- But my god the diff...
+
 ---
 
 layout: true
 
 ## Environmental Changes
+
+---
+
+- Standard services are builtin
+  - `Clock`, `Console`, `Random`, `System`
+
+--
+  - Still testable
+
+???
+- The serivces are builtin into the runtime system
+- The runtime system is configurable, including in tests
+
+--
+- Removed `Blocking` service
+--
+
+  - Blocking thread-pool builtin
+
+---
+
+```
+class WarehouseManager:
+
+  def keepAwake: UIO[Unit] =
+    pingWorker
+      .repeat(Schedule.fibonacci(1.second).unit)
+```
+---
+
+```
+class WarehouseManager(clock: Clock):
+
+  def keepAwake: UIO[Unit] =
+    pingWorker
+      .repeat(Schedule.fibonacci(1.second).unit)
+      .provide(clock)
+```
+---
+
+```
+class WarehouseManager:
+
+  def keepAwake: UIO[Unit] =
+    pingWorker
+      .repeat(Schedule.fibonacci(1.second).unit)
+```
+---
+layout: true
+
+## I Can Has
 
 ---
 
@@ -387,26 +544,463 @@ layout: true
 
 --
 
-  - `ZIO[Has[A] with Has[B] with Has[C], ...]`
-  - `ZIO[A with B with C, ...]`
-
+  - `ZIO[Has[A] & Has[B] & Has[C], ...]`
+  - `ZIO[A & B & C, ...]`
 --
 
-- No more `ZManaged`
---
+- A shift in perspective
+---
 
-  - `ZManaged[Any, Nothing, Foo]`
-  - `ZIO[Scope, Nothing, Foo]`
-  - `toManaged` anyone?
+layout: true
+## The Service Pattern Revisited
+---
+
+- A party planner service
+- With two dependencies:
+  - Venue service
+  - Budget service
 
 ---
 
-- Standard services are builtin
-  - `Clock`, `Console`, `Random`, `System`
-  - Still testable
+layout: true
+## The Service Pattern Revisited - ZIO 1
+---
+
+```
+object venue:
+{{content}}
+
+```
+--
+
+  type Venue = Has[Venue.Service]
+{{content}}
+--
+
+  object Venue:
+    trait Service:
+      def book: UIO[BookingStatus]
+{{content}}
+--
+
+object budget:
+  type Budget = Has[Budget.Service]
+
+  object Budget:
+    trait Service:
+      def calc: UIO[Money]
+---
+
+```
+object planner:
+  type Planner = Has[Planner.Service]
+
+  object Planner:
+    trait Service:
+      def planParty(budget: Money): UIO[Party]
+{{content}}
+```
+--
+
+  val live = ZLayer.fromServices:
+    (venue: Venue.Service, budget: Budget.Service) =>
+      new Planner.Service:
+        def planParty(budget: Money): UIO[Party] =
+          // use venue and budget
+          ???
+{{content}}
+--
+
+  def planParty
+    (budget: Money): URIO[Planner, Party] =
+    ZIO.accessM(_.{{content}}planParty(budget))
 
 --
-- Removed `Blocking` service
+get.
+---
+
+layout: true
+## The Service Pattern Revisited - ZIO 2
+
+---
+```
+trait Venue:
+  def book: UIO[BookingStatus]
+{{content}}
+```
+--
+
+trait Budget:
+  def calc: UIO[Money]
+{{content}}
+--
+
+trait Planner:
+  def planParty(budget: Money): UIO[Party]
+{{content}}
+--
+
+class PlannerLive(venue: Venue, budget: Budget)
+  extends Planner:
+
+  def planParty(budget: Money): UIO[Party] = ???
+{{content}}
+--
+
+object PlannerLive:
+  val layer = ZLayer:
+    for
+      venue <- ZIO.service[Venue]
+      budget <- ZIO.service[Budget]
+    yield PlannerLive(venue, budget)
+---
+
+```
+trait Venue:
+  def book: UIO[BookingStatus]
+
+trait Budget:
+  def calc: UIO[Money]
+
+trait Planner:
+  def planParty(budget: Money): UIO[Party]
+
+class PlannerLive(venue: Venue, budget: Budget)
+  extends Planner:
+
+  def planParty(budget: Money): UIO[Party] = ???
+
+object PlannerLive:
+  val layer = ZLayer.derive[PlannerLive]
+{{content}} 
+```
+???
+- Pitfall with auto-deriving queues and hubs
+---
+
+```
+object Planner:
+  def planParty
+    (budget: Money): URIO[Planner, Party] =
+
+    ZIO.serviceWithZIO(_.planParty(budget))
+```
+--
+.envLaws[![https://x.com/jdegoes/status/1600181512648826881](env-laws.png)]
+---
+
+layout: true
+## Can I Talk to Management, Please?
+
+---
+- No more `ZManaged`
+
+--
+  - `ZManaged[Any, Nothing, Foo]`
+  - `ZIO[Scope, Nothing, Foo]`
+
+--
+- `toManaged` anyone?
+
+---
+
+
+layout: true
+## `ZManaged`
+
+---
+
+```
+val waiters: Ref[Waiter] = ???
+val barmans: Ref[Barman] = ???
+{{content}}
+```
+--
+
+def serve(id: TableID) =
+  for
+    waiter <- waiters.get
+{{content}}
+
+--
+    orders <- waiter.takeBevarageOrder(id)
+{{content}}
+--
+
+    drinks <- ZIO.foreach(orders): order =>
+{{content}}
+--
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+
+{{content}}
+--
+    _ <- waiter.serveDrinks(drinks)
+
+  yield ()
+
+---
+
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: Ref[Barman] = ???
+
+def serve(id: TableID) =
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id)
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+
+    _ <- waiter.serveDrinks(drinks)
+
+  yield ()
+```
+---
+
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: Ref[Barman] = ???
+
+def serve(id: TableID) =
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id).toManaged_
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+
+    _ <- waiter.serveDrinks(drinks)
+
+  yield ()
+```
+---
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: Ref[Barman] = ???
+
+def serve(id: TableID) =
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id).toManaged_
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+    .toManaged_
+
+    _ <- waiter.serveDrinks(drinks)
+
+  yield ()
+```
+---
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: Ref[Barman] = ???
+
+def serve(id: TableID) =
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id).toManaged_
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+    .toManaged_
+
+    _ <- waiter.serveDrinks(drinks).toManaged_
+
+  yield ()
+```
+---
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: Ref[Barman] = ???
+
+def serve(id: TableID) =
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id).toManaged_
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+    .toManaged_
+
+    _ <- waiter.serveDrinks(drinks).toManaged_
+
+  yield ()
+.useNow
+```
+---
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: ZPool[Nothing, Barman] = ???
+
+def serve(id: TableID) =
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id).toManaged_
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+    .toManaged_
+
+    _ <- waiter.serveDrinks(drinks).toManaged_
+
+  yield ()
+.useNow
+```
+---
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: ZPool[Nothing, Barman] = ???
+
+def serve(id: TableID) =
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id).toManaged_
+
+    drinks <- ZManaged.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order).toManaged_
+      yield drink
+
+    _ <- waiter.serveDrinks(drinks).toManaged_
+
+  yield ()
+.useNow
+```
+---
+
+layout: true
+## `Scope`
+---
+
+```
+val waiters: Ref[Waiter] = ???
+val barmans: Ref[Barman] = ???
+
+def serve(id: TableID) =
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id)
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+
+    _ <- waiter.serveDrinks(drinks)
+
+  yield ()
+```
+---
+
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: Ref[Barman] = ???
+
+def serve(id: TableID) =
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id)
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+
+    _ <- waiter.serveDrinks(drinks)
+
+  yield ()
+```
+---
+
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: Ref[Barman] = ???
+
+def serve(id: TableID): ZIO[Scope, Nothing, Unit] =
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id)
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+
+    _ <- waiter.serveDrinks(drinks)
+
+  yield ()
+```
+---
+
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: Ref[Barman] = ???
+
+def serve(id: TableID) = ZIO.scoped:
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id)
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+
+    _ <- waiter.serveDrinks(drinks)
+
+  yield ()
+```
+---
+
+```
+val waiters: ZPool[Nothing, Waiter] = ???
+val barmans: ZPool[Nothing, Barman] = ???
+
+def serve(id: TableID) = ZIO.scoped:
+  for
+    waiter <- waiters.get
+    orders <- waiter.takeBevarageOrder(id)
+
+    drinks <- ZIO.foreach(orders): order =>
+      for
+        barman <- barmans.get
+        drink <- barman.prepareDrink(order)
+      yield drink
+
+    _ <- waiter.serveDrinks(drinks)
+
+  yield ()
+```
+???
+- Note that we might to add an inner `scoped` call if we want to reduce the scope of the `barman` value
 
 ---
 layout: true
@@ -426,11 +1020,449 @@ layout: true
 --
 - Debugging
 
-
---
-- "Eliminators for environmental effects"
+---
+layout: true
+## Wire It Up
 
 ---
+
+```
+trait Logging
+trait Monitoring
+{{content}}
+```
+--
+
+trait Budget
+trait Venue
+trait Menu
+trait Warehouse
+trait Storage
+{{content}}
+--
+
+trait PartyPlanner
+trait EventCoordinator
+{{content}}
+--
+
+class PartyManagement(
+  planner: PartyPlanner,
+  coordinator: EventCoordinator):
+
+  def run: Task[Unit]
+
+---
+```
+class LoggingLive(...) extends Logging
+class MonitoringLive(...) extends Monitoring
+{{content}}
+```
+--
+
+class BudgetLive(...) extends Budget
+class VenueLive(...) extends Venue
+class MenuLive(...) extends Menu
+class WarehouseLive(...) extends Warehouse
+class StorageLive(...) extends Storage
+{{content}}
+
+--
+
+class PartyPlannerLive(...) extends PartyPlanner
+class EventCoordinatorLive(...) extends EventCoordinator
+
+---
+```
+object LoggingLive:
+  val layer = ZLayer.derive[LoggingLive]
+object MonitoringLive:
+  val layer = ZLayer.derive[MonitoringLive]
+{{content}}
+```
+--
+
+object BudgetLive:
+  val layer = ZLayer\.derive[BudgetLive]
+  ...
+{{content}}
+--
+
+object PartyManagement:
+  val layer = ZLayer\.derive[PartyManagement]
+
+---
+
+```
+object PartyApp extends ZIOAppDefault:
+{{content}}
+```
+--
+
+  val app: ZIO[PartyManagement, Throwable, Unit] =
+    for
+      party <- ZIO.service[PartyManagement]
+      _ <- party.run
+    yield ()
+{{content}}
+--
+
+  def run = app{{content}}
+--
+.provide(
+{{content}}  )
+
+--
+    LoggingLive.layer,
+{{content}}
+--
+    MonitoringLive.layer,
+    BudgetLive.layer,
+    VenueLive.layer,
+    MenuLive.layer,
+    WarehouseLive.layer,
+    PartyPlannerLive.layer,
+    EventCoordinatorLive.layer,
+    PartyManagement.layer,
+---
+
+```
+def run = app.provide(
+  LoggingLive.layer,
+  MonitoringLive.layer,
+  BudgetLive.layer,
+  // VenueLive.layer,
+  MenuLive.layer,
+  WarehouseLive.layer,
+  // PartyPlannerLive.layer,
+  EventCoordinatorLive.layer,
+  PartyManagement.layer)
+```
+--
+.layerError[
+```txt
+[error] ──── ZLAYER ERROR ────────────────────────────────
+[error]
+[error]  Please provide layers for the following 2 types:
+[error]
+[error]    Required by EventCoordinatorLive.layer
+[error]    1. Venue
+[error]
+[error]    Required by PartyManagement.layer
+[error]    2. PartyPlanner
+[error]
+[error] ─────────────────────────────────────────────────
+```
+]
+---
+```
+def run = app.provide(
+  LoggingLive.layer,
+  MonitoringLive.layer,
+  BudgetLive.layer,
+  VenueLive.layer,
+  MenuLive.layer,
+  WarehouseLive.layer,
+  StorageLive.layer, // not needed
+  PartyPlannerLive.layer,
+  EventCoordinatorLive.layer,
+  PartyManagement.layer)
+```
+--
+.layerError[
+```txt
+[warn] ──── ZLAYER WARNING ──────────────────────
+[warn]
+[warn]  You have provided more than is required.
+[warn]  You may remove the following layer:
+[warn]
+[warn]    1. StorageLive.layer
+[warn]
+[warn] ─────────────────────────────────────────
+```
+]
+
+---
+```
+def run = app.provide(
+  LoggingLive.layer,
+  MonitoringLive.layer,
+  BudgetLive.layer,
+  VenueLive.layer,
+  MenuLive.layer,
+  WarehouseLive.layer,
+  PartyPlannerLive.layer,
+  EventCoordinatorLive.layer,
+  PartyManagement.layer,
+  ZLayer.Debug.mermaid)
+```
+---
+
+.layerError[
+```txt
+Diagnostics:
+1. 
+     ZLayer Wiring Graph  
+   
+   ◉ PartyManagement.layer
+   ├─◑ PartyPlannerLive.layer
+   │ ├─◑ BudgetLive.layer
+   │ │ ╰─◑ LoggingLive.layer
+   │ ╰─◑ WarehouseLive.layer
+   │   ╰─◑ MonitoringLive.layer
+   ╰─◑ EventCoordinatorLive.layer
+     ├─◑ MenuLive.layer
+     │ ├─◑ LoggingLive.layer
+     │ ╰─◑ MonitoringLive.layer
+     ╰─◑ VenueLive.layer
+       ├─◑ LoggingLive.layer
+       ╰─◑ MonitoringLive.layer
+   
+   Mermaid Live Editor Link
+   https://mermaid-js.github.io/mermaid-live-editor/edit/#eyJjb...
+```
+]
+---
+
+.layers.center[
+![](layers.png)
+]
+
+---
+layout: true
+## Eliminators for Environmental Effects
+---
+--
+
+```
+trait VenueBooking:
+  def checkVenue(
+    venueId: VenueId): ZIO[Any, VE, VenueStatus]
+```
+---
+
+``` 
+trait VenueBooking:
+  def checkVenue(
+    venueId: VenueId): ZIO[Durable, VE, VenueStatus]
+{{content}}
+```
+--
+
+  def payDeposit(
+    venueId: VenueId,
+    clientId: ClientId): ZIO[Durable, VE, Receipt]
+
+  def notifyBooking(
+    venueId: VenueId,
+    clientId: ClientId,
+    receipt: Receipt): ZIO[Durable, VE, ClientAck]
+
+---
+
+```
+def bookVenue(
+    venue: VenueId,
+    client: ClientId) =
+{{content}}
+```
+--
+
+  val flow =
+{{content}}
+--
+    checkVenue(venue).flatMap:
+{{content}}
+--
+      case Occupied =>
+        ZIO.succeed(BookingStatus.Failure)
+{{content}}
+--
+
+      case Available =>
+        for
+          receipt <- payDeposit(venue, client)
+          ack <- notifyBooking(venue, client, receipt)
+        yield BookingStatus.Success(receipt, ack)
+{{content}}
+--
+
+  .retryN(10)
+---
+
+```
+def bookVenue(
+    venue: VenueId,
+    client: ClientId) =
+
+  val flow: ZIO[Durable, VE, BookingStatus] =
+    checkVenue(venue).flatMap:
+      case Occupied =>
+        ZIO.succeed(BookingStatus.Failure)
+
+      case Available =>
+        for
+          receipt <- payDeposit(venue, client)
+          ack <- notifyBooking(venue, client, receipt)
+        yield BookingStatus.Success(receipt, ack)
+
+  .retryN(10)
+{{content}}
+```
+--
+
+  endurate(flow)
+---
+
+```
+def bookVenue(
+    venue: VenueId,
+    client: ClientId): ZIO[Any, VE, BookingStatus] =
+
+  val flow: ZIO[Durable, VE, BookingStatus] =
+    checkVenue(venue).flatMap:
+      case Occupied =>
+        ZIO.succeed(BookingStatus.Failure)
+
+      case Available =>
+        for
+          receipt <- payDeposit(venue, client)
+          ack <- notifyBooking(venue, client, receipt)
+        yield BookingStatus.Success(receipt, ack)
+
+  .retryN(10)
+
+  endurate(flow)
+```
+---
+
+```
+val endurate: ZLayer[Any, Nothing, Durable]
+
+// endurate.apply: ZIO[R & Durable, E, A] => ZIO[R, E, A]
+```
+
+---
+class:durableRun
+
+```txt
+running with: TransactionId(8f484e45-c79d-4e52-84c0-8db21ec91877)
+running [checkVenue] durably
+fetched new value: Available
+running [payDeposit] durably
+<FAIL> fetched new value: Fail(VenueException$$anon$2,
+Stack trace for thread "zio-fiber-1348949048":
+        at VenueBooking.Default.payDeposit(6.Eliminators.scala:91)
+        ...
+{{content}}
+```
+--
+running [checkVenue] durably
+found cached value: Available
+running [payDeposit] durably
+fetched new value: Receipt(0.6420044684650176)
+running [notifyBooking] durably
+<FAIL> fetched new value: Fail(VenueException$$anon$2,
+Stack trace for thread "zio-fiber-1348949048":
+        at VenueBooking.Default.notifyBooking(6.Eliminators.scala:100)
+        ...
+{{content}}
+--
+running [checkVenue] durably
+found cached value: Available
+running [payDeposit] durably
+found cached value: Receipt(0.6420044684650176)
+running [notifyBooking] durably
+fetched new value: Okay
+finished durable run
+booking status: Success(Receipt(0.6420044684650176),Okay)
+
+---
+
+layout: true
+
+## Better Compilation Errors
+
+---
+
+--
+
+```
+ZIO.fail("boom!").orDie
+```
+--
+```txt
+[error] Cannot prove that String <:< Throwable.
+[error] ZIO.fail("error").orDie
+[error]                        ^
+```
+
+--
+
+```txt
+[error] This operator requires that the error type be a
+[error] subtype of Throwable
+[error] But the actual type was String.
+[error]
+[error] val errorChannel = ZIO.fail("boom!").orDie
+[error]                                           ^
+```
+
+---
+
+```
+ZIO.succeed(Set(1, 2, 3)).head
+```
+
+--
+
+```txt
+[error] Cannot prove that Set[Int] <:< List[B].
+[error]
+[error] ZIO.succeed(Set(1, 2, 3)).head
+[error]                               ^
+```
+
+--
+
+```txt
+[error] This operator requires that the output type be a
+[error] subtype of List[B]
+[error] But the actual type was Set[A].
+[error] 
+[error] ZIO.succeed(Set(1, 2, 3)).head
+[error]                               ^
+
+```
+---
+
+```
+val stuff: ZIO[Blocking & Logging, Nothing, Int] = ???
+
+stuff.provide(logger)
+```
+--
+```txt
+[error] Found:    (logger : AppLogger)
+[error] Required: zio.blocking.Blocking &
+[error]           zio.logging.Logging
+[error] stuff.provide(logger)
+[error]               ^^^^^^
+```
+--
+```txt
+[error] ──── ZLAYER ERROR ───────────────────────────────
+[error]
+[error]  Please provide a layer for the following type:
+[error]
+[error]    1. zio.blocking.Blocking
+[error] ─────────────────────────────────────────────────
+[error]
+[error] stuff.provide(logger)
+[error] ^^^^^^^^^^^^^^^^^^^^^
+```
+---
+
 layout: true
 
 ## Testing
@@ -441,16 +1473,117 @@ layout: true
 
 --
 
-- Sharing layers with `bootstrap`
-
---
-
 - Test services part of runtime
 
 --
 
-  - `Clock`, `Console`, `Random`, `System`
-  - `Sized`
+  - `Clock`, `Console`, `Random`, `System`, `Sized`
+
+--
+
+- No more `MutableRunnableSpec`
+
+--
+  - `suiteAll` macro instead
+
+--
+
+- ZIO Mock is deprecated
+--
+
+  - ScalaMock 7 for stubbing (?)
+
+--
+
+- Sharing layers with `bootstrap`
+
+---
+
+```
+class TestDB:
+  def createTable(schema: String): UIO[Table]
+
+  def dropTable(table: Table): UIO[Unit]
+{{content}}
+```
+--
+
+object TestDB:
+  val layer: ZLayer[Any, Nothing, TestDB]
+{{content}}
+--
+
+def withTable
+    (schema: String)
+    (f: Table => ZIO[R, E, A]): ZIO[TestDB & R, E, A]
+{{content}}
+--
+
+abstract class SharedDBSpec extends ZIOSpec[TestDB]:
+{{content}}
+--
+
+  val bootstrap: ZLayer[Any, Nothing, TestDB] =
+    TestDB.layer
+---
+
+```
+object Suite1 extends SharedDBSpec:
+{{content}}
+```
+--
+  val spec = suiteAll("suite1"):
+{{content}}
+--
+    test("test1"):
+      withTable("schema1-1"): table =>
+        assertTrue(table.schema == "schema1-1")
+{{content}}
+--
+
+    test("test2"):
+      withTable("schema1-2"): table =>
+        assertTrue(table.schema == "schema1-2")
+{{content}}
+--
+
+object Suite2 extends SharedDBSpec:
+  val spec = suiteAll("suite2"):
+    test("test1"):
+      withTable("schema2-1"): table =>
+        assertTrue(table.schema == "schema2-1")
+
+    test("test2"):
+      withTable("schema2-2"): table =>
+        assertTrue(table.schema == "schema2-2")
+---
+class:testOutput
+
+```txt
+Starting database
+
++ suite1
+Created table: Table(2493,schema1-1)
+Created table: Table(1043,schema1-2)
+Dropping table 2493
+Dropping table 1043
+  + test2
+  + test1
++ suite2
+Created table: Table(218,schema2-2)
+Created table: Table(3882,schema2-1)
+Dropping table 218
+Dropping table 3882
+  + test2
+  + test1
+4 tests passed. 0 tests failed. 0 tests ignored.
+
+Executed in 505 ms
+
+Stopping database
+
+Completed tests
+```
 
 ---
 
@@ -473,7 +1606,7 @@ layout: true
 ## Config
 ---
 
-- Config buitlin
+- Config builtin
 
 --
 
@@ -490,15 +1623,62 @@ layout: true
 --
 
 - Pluggable backends
+
+---
+
+```
+class PartyManagement(
+  config: PartyPlannerConfig,
+  warehouse: WarehouseManager)
+{{content}}
+```
+--
+
+object PartyPlannerConfig:
+  implicit val config: Config[PartyPlannerConfig] =
+    deriveConfig
+{{content}}
+--
+
+object PartyManagement:
+
+  val layer: ZLayer[
+    WarehouseManager, Config.Error, PartyManagement] =
+
+    ZLayer.derive[PartyManagement]
+{{content}}
+---
+
+```
+import zio.config.typesafe.*
+
+object PartyApp extends ZIOAppDefault:
+  override val bootstrap: ZLayer[Any, Nothing, Unit] =
+    Runtime.setConfigProvider(
+      ConfigProvider.fromResourcePath())
+{{content}}
+```
+--
+
+  val app =
+    for
+      greeting <- ZIO.config(Config.string("greeting"))
+      _ <- Console.printLine(greeting)
+      party <- ZIO.service[PartyManagement]
+      _ <- party.run
+    yield ()
+{{content}}
+--
+
+  val run = app.provide(
+    PartyManagement.layer,
+    WarehouseManager.layer)
+
 ---
 layout: true
 
 ## Observability
 ---
-
-- Logging facade
-
---
 
 - Tracing always on
 --
@@ -507,17 +1687,211 @@ layout: true
 
 --
 
+- Logging facade
+
+--
+
 - Monitoring builtin
 --
 
   - JVM metrics
+  - ZIO runtime metrics
 
 --
 
 - Pluggable backends
 
+--
+
+- Configurable with aspects
 
 
+---
+
+layout: true
+
+## Stacktraces
+
+---
+class:stacktracesOld
+
+```txt
+ncreep.StackApp$Err
+        at ncreep.StackApp$Err$.apply(11.Stacktraces.scala:8)
+        at ncreep.StackApp$.checkCondition$$anonfun$2(11.Stacktraces.scala:18)
+        at zio.Cause.map$$anonfun$1(Cause.scala:236)
+        at zio.Cause.flatMap(Cause.scala:123)
+        at zio.Cause.flatMap(Cause.scala:128)
+        at zio.Cause.map(Cause.scala:236)
+        at zio.ZIO$MapErrorFn.apply$$anonfun$7(ZIO.scala:4552)
+        at zio.ZIO$.halt$$anonfun$1(ZIO.scala:3503)
+        at zio.internal.FiberContext.evaluateNow(FiberContext.scala:411)
+        at zio.internal.FiberContext.fork$$anonfun$3(FiberContext.scala:779)
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+        at java.base/java.lang.Thread.run(Thread.java:833)
+
+Fiber:Id(1737926654239,1) was supposed to continue to:
+  a future continuation at ncreep.StackApp$.checkCondition$$anonfun$2(11.Stacktraces.scala:18)
+  a future continuation at zio.ZIO$.2$$anonfun(ZIO.scala:3029)
+  a future continuation at zio.ZIO.zipWith$$anonfun$1(ZIO.scala:2294)
+  a future continuation at zio.ZIO.zipWith$$anonfun$1(ZIO.scala:2294)
+  a future continuation at zio.ZIO$.foreach$$anonfun$3(ZIO.scala:3030)
+  a future continuation at zio.ZIO$.2$$anonfun(ZIO.scala:3029)
+  a future continuation at zio.ZIO.zipWith$$anonfun$1(ZIO.scala:2294)
+  a future continuation at zio.ZIO.zipWith$$anonfun$1(ZIO.scala:2294)
+  a future continuation at zio.ZIO$.foreach$$anonfun$3(ZIO.scala:3030)
+  a future continuation at zio.ZIO.exitCode$$anonfun$2(ZIO.scala:626)
+
+Fiber:Id(1737926654239,1) execution trace:
+  at zio.ZIO$.fromEither$$anonfun$1(ZIO.scala:3331)
+  at zio.ZIO$.1$$anonfun(ZIO.scala:2337)
+  at zio.ZIO$.absolve$$anonfun$1(ZIO.scala:2337)
+  at zio.ZIO.get$$anonfun$1(ZIO.scala:861)
+  at scala.$less$colon$less$$anon$1.apply(typeConstraints.scala:148)
+  at ncreep.StackApp$.checkCondition$$anonfun$1(11.Stacktraces.scala:16)
+  at zio.ZIO.zipWith$$anonfun$1(ZIO.scala:2294)
+  at zio.ZIO$.foreach$$anonfun$1(ZIO.scala:3028)
+  at zio.ZIO.zipWith$$anonfun$1(ZIO.scala:2294)
+  at zio.ZIO$.foreach$$anonfun$1(ZIO.scala:3028)
+
+Fiber:Id(1737926654239,1) was spawned by:
+
+Fiber:Id(1737926653928,0) was supposed to continue to:
+  a future continuation at zio.App.1$$anonfun(App.scala:60)
+  a future continuation at zio.App.main$$anonfun$1(App.scala:58)
+
+Fiber:Id(1737926653928,0) ZIO Execution trace: <empty trace>
+
+Fiber:Id(1737926653928,0) was spawned by: <empty trace>
+```
+---
+
+class:stacktracesNew
+
+
+```txt
+ncreep.StackApp$Err: null
+        at ncreep.StackApp$Err$.apply(11.Stacktraces.scala:8)
+        at ncreep.StackApp$.checkCondition$$anonfun$3(11.Stacktraces.scala:18)
+        at zio.Cause$Fail.map(Cause.scala:940)
+        at zio.ZIO.mapError$$anonfun$1(ZIO.scala:994)
+        at zio.ZIO.mapErrorCause$$anonfun$1(ZIO.scala:1006)
+        at ncreep.StackApp.checkCondition(11.Stacktraces.scala:17)
+        at ncreep.StackApp.checkCondition(11.Stacktraces.scala:18)
+        at ncreep.StackApp.attemptTake(11.Stacktraces.scala:21)
+        at ncreep.StackApp.choose(11.Stacktraces.scala:24)
+```
+---
+
+layout: true
+## Logging and Monitoring
+
+---
+
+```
+def handleGuests(ids: List[GuestId]) =
+  val flow =
+    for
+      _ <- ZIO.logInfo("starting check-in")
+
+      approvals <- ZIO.foreach(ids): id =>
+        checkIn.checkInvitation(id)
+
+      _ <- ZIO.logInfo("finished")
+    yield approvals
+
+  flow
+```
+---
+
+```
+def handleGuests(ids: List[GuestId]) =
+  val flow =
+    for
+      _ <- ZIO.logInfo("starting check-in")
+
+      approvals <- ZIO.foreach(ids): id =>
+        checkIn.checkInvitation(id) @@ withId(id)
+
+      _ <- ZIO.logInfo("finished")
+    yield approvals
+
+  flow
+
+def withId(id: GuestId) =
+  ZIOAspect.annotated("guestId", id.value.toString)
+```
+---
+
+```
+def handleGuests(ids: List[GuestId]) =
+  val flow =
+    for
+      _ <- ZIO.logInfo("starting check-in")
+
+      approvals <- ZIO.foreach(ids): id =>
+        checkIn.checkInvitation(id) @@ withId(id)
+
+      _ <- ZIO.logInfo("finished")
+    yield approvals
+
+  flow @@ withLogger
+
+val withLogger = loggerName("GuestHandler")
+```
+---
+
+```
+def handleGuests(ids: List[GuestId]) =
+  val flow =
+    for
+      _ <- ZIO.logInfo("starting check-in")
+
+      approvals <- ZIO.foreach(ids): id =>
+        checkIn.checkInvitation(id) @@ withId(id)
+
+      _ <- ZIO.logInfo("finished")
+    yield approvals
+
+  flow @@ withLogger @@ countCheckIns @@ countApprovals
+
+val countCheckIns =
+  Metric.counter("checkIns").fromConst(1)
+
+val countApprovals =
+  Metric.counter("approvals")
+    .contramap[List[Approval]](_.size)
+```
+---
+
+```
+object PartyApp extends ZIOAppDefault:
+{{content}}
+```
+--
+
+  val datadogClient = ZLayer.make[Unit](
+    ZLayer.succeed(DatadogConfig("localhost", 8125)),
+    ZLayer.succeed(MetricsConfig(100.millis)),
+    datadogLayer)
+{{content}}
+--
+
+  override val bootstrap =
+{{content}}
+--
+    Runtime.removeDefaultLoggers >>>
+{{content}}
+--
+      SLF4J.slf4j >>>
+{{content}}
+--
+      datadogClient >>>
+{{content}}
+--
+      Runtime.enableRuntimeMetrics >>>
+      DefaultJvmMetrics.live.unit
 
 ---
 layout: true
@@ -526,22 +1900,40 @@ layout: true
 
 ---
 
+- Composable apps
+  - `PartyApp <> WarehouseApp <> Metrics`
+--
 
+- Simplified datatypes
+  - `ZRef[+EA, +EB, -A, +B] => Ref[A]`
+--
+
+- Streaming foundations
+  - .zChannel[`ZChannel[-Env, -InErr, -InElem, -InDone, +OutErr, +OutElem, +OutDone]`]
+---
+
+- `Unsafe` APIs
+  - Using implicits to make unsafe code more intentional
+
+--
+
+- New datatypes
+  - `Hub`
+  - `ZState`
+--
+
+- Smart contructors
+  - Universal `ZIO.from`
+
+- ...
 
 ---
----
----
----
----
----
+
 layout: false
 class: transition
 
-.endQuote[
-> TODO
-]
+.centered.githubLink[TODO]
 
-.endQuote.footnote[TODO]
 .centered.linksFin.linkStackFin[[linksta.cc/@ncreep](https://linksta.cc/@ncreep)]
 
 
